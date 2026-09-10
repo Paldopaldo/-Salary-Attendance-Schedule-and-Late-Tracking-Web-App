@@ -4,7 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { createApp } from './src/app.ts';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 async function startServer() {
   const app = createApp();

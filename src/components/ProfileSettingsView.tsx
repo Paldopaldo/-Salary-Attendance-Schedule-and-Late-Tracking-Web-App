@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Lock, KeyRound, Shield, CheckCircle2, AlertCircle, RefreshCw, UserCheck } from 'lucide-react';
+import { User, Lock, KeyRound, Shield, CheckCircle2, AlertCircle, RefreshCw, UserCheck, Copy, Check, ExternalLink, Database } from 'lucide-react';
 import { apiRequest } from '../lib/api.ts';
 
 interface ProfileSettingsViewProps {
@@ -331,6 +331,26 @@ const SupabaseStatusSection: React.FC = () => {
     checkStatus();
   }, []);
 
+  const [copiedSchema, setCopiedSchema] = useState(false);
+  const [showSqlPreview, setShowSqlPreview] = useState(false);
+  const [sqlContent, setSqlContent] = useState<string>('');
+
+  const fetchAndCopySql = async () => {
+    try {
+      let sql = sqlContent;
+      if (!sql) {
+        const res = await apiRequest<{ sql: string }>('/supabase/schema');
+        sql = res.sql;
+        setSqlContent(sql);
+      }
+      await navigator.clipboard.writeText(sql);
+      setCopiedSchema(true);
+      setTimeout(() => setCopiedSchema(false), 3000);
+    } catch (err: any) {
+      console.error('Failed to copy schema:', err);
+    }
+  };
+
   const handleMigrate = async () => {
     setMigrating(true);
     setMigrateMsg(null);
@@ -409,10 +429,71 @@ const SupabaseStatusSection: React.FC = () => {
       {/* Sync & Migration Actions if configured */}
       {status?.configured && (
         <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-3">
-          <div className="text-xs text-neutral-700">
-            <strong>Supabase Cloud Database:</strong> All new check-ins, check-outs, schedule updates, profile edits, and audit logs are saved directly to your Supabase PostgreSQL database.
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="text-xs text-neutral-700">
+              <strong className="text-neutral-900">Supabase Cloud Project:</strong>{' '}
+              <span className="font-mono text-[11px] text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded">
+                https://etiycagnbmrcirbujqmv.supabase.co
+              </span>
+            </div>
+            <a
+              href="https://supabase.com/dashboard/project/etiycagnbmrcirbujqmv/sql/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-900 font-semibold underline"
+            >
+              Open Supabase SQL Editor
+              <ExternalLink className="w-3 h-3" />
+            </a>
           </div>
-          
+
+          {(status as any)?.tablesMissing && (
+            <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-xs text-amber-900 space-y-2">
+              <div className="flex items-center gap-1.5 font-semibold text-amber-950">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>One-Time Step: Create Database Tables in Supabase</span>
+              </div>
+              <p className="text-[12px] text-amber-800 leading-relaxed">
+                Your Supabase credentials are authenticated and connected! To store your data in the cloud, run the prepared schema script once in your Supabase SQL Editor.
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={fetchAndCopySql}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white font-medium text-xs rounded-lg shadow-sm transition-colors cursor-pointer"
+                >
+                  {copiedSchema ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedSchema ? 'Copied SQL to Clipboard!' : 'Copy SQL Schema (supabase-schema.sql)'}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!sqlContent) {
+                      const res = await apiRequest<{ sql: string }>('/supabase/schema');
+                      setSqlContent(res.sql);
+                    }
+                    setShowSqlPreview(!showSqlPreview);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 font-medium text-xs rounded-lg transition-colors cursor-pointer"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  {showSqlPreview ? 'Hide SQL Code' : 'View SQL Code'}
+                </button>
+              </div>
+
+              {showSqlPreview && sqlContent && (
+                <div className="mt-2">
+                  <div className="text-[11px] font-semibold text-neutral-600 mb-1">
+                    Paste this into Supabase SQL Editor:
+                  </div>
+                  <pre className="p-3 bg-neutral-900 text-neutral-100 rounded-lg text-[11px] font-mono max-h-48 overflow-y-auto whitespace-pre">
+                    {sqlContent}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
           {(migrateMsg || syncMsg) && (
             <div className="space-y-1">
               {migrateMsg && (
@@ -452,11 +533,11 @@ const SupabaseStatusSection: React.FC = () => {
 
       {/* Setup Instructions */}
       <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50/40 text-xs text-neutral-600 space-y-2">
-        <div className="font-semibold text-neutral-900">How to Connect Your Supabase Credentials:</div>
+        <div className="font-semibold text-neutral-900">How Your Data is Secured on Supabase:</div>
         <ol className="list-decimal list-inside space-y-1 text-neutral-600">
-          <li>Provide your <strong>Project URL</strong> (e.g. <code className="font-mono text-[11px] bg-neutral-200 px-1 py-0.5 rounded">https://xyz.supabase.co</code>) and <strong>Anon Key</strong>.</li>
-          <li>Run the provided <code className="font-mono text-[11px] bg-neutral-200 px-1 py-0.5 rounded">supabase-schema.sql</code> script in your Supabase SQL Editor.</li>
-          <li>Deploy directly to Vercel with these environment variables set in Vercel project settings.</li>
+          <li><strong>Connected Project:</strong> <code className="font-mono text-[11px] bg-neutral-200 px-1 py-0.5 rounded">https://etiycagnbmrcirbujqmv.supabase.co</code></li>
+          <li><strong>Row-Level Security (RLS):</strong> Enabled on all tables so your attendance, salary calculation, shift records, and logs are protected.</li>
+          <li><strong>Zero Data Loss:</strong> If network or internet drops, the app automatically persists records locally in SQLite, then synchronizes seamlessly with Supabase.</li>
         </ol>
       </div>
     </div>

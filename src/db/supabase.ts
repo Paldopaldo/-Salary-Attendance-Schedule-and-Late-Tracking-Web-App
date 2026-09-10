@@ -1,5 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database as SqlJsDatabase } from 'sql.js';
+import dotenv from 'dotenv';
+
+dotenv.config({ override: true });
 
 let supabaseClient: SupabaseClient | null = null;
 let lastSyncTimestamp = 0;
@@ -78,6 +81,7 @@ export function getSupabase(): SupabaseClient {
 export async function checkSupabaseHealth(): Promise<{
   connected: boolean;
   configured: boolean;
+  tablesMissing?: boolean;
   message: string;
   error?: string;
 }> {
@@ -106,11 +110,12 @@ export async function checkSupabaseHealth(): Promise<{
           error: error.message,
         };
       }
-      if (error.code === '42P01') {
+      if (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('schema cache')) {
         return {
           connected: true,
           configured: true,
-          message: 'Connected to Supabase project, but tables are missing. Please run supabase-schema.sql in your Supabase SQL editor.',
+          tablesMissing: true,
+          message: 'Connected to Supabase project, but tables need to be created. Please run supabase-schema.sql in your Supabase SQL Editor.',
           error: error.message,
         };
       }
@@ -400,7 +405,7 @@ export async function syncFromSupabaseToSqlite(db: SqlJsDatabase, force = false)
         tripCircuitBreaker(usersRes.error.message);
         return false;
       }
-      if (usersRes.error.code === '42P01') {
+      if (usersRes.error.code === '42P01' || usersRes.error.code === 'PGRST205' || usersRes.error.message?.includes('schema cache')) {
         // Tables not created yet
         return false;
       }
@@ -550,7 +555,14 @@ export async function migrateSqliteToSupabase(): Promise<{
 
   if (userRows.length > 0) {
     const { error } = await supabase.from('users').upsert(userRows, { onConflict: 'id' });
-    if (error) throw new Error(`Users migration failed: ${error.message}`);
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+        throw new Error(
+          'Supabase tables do not exist yet. Please run the SQL schema in your Supabase SQL Editor (supabase-schema.sql) before migrating.'
+        );
+      }
+      throw new Error(`Users migration failed: ${error.message}`);
+    }
   }
 
   // 2. Migrate Schedules

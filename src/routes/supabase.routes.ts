@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { checkSupabaseHealth, isSupabaseConfigured, migrateSqliteToSupabase, syncFromSupabaseToSqlite } from '../db/supabase.ts';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware.ts';
 
@@ -14,10 +16,28 @@ router.get('/status', async (_req, res) => {
     return res.json({
       configured: health.configured,
       connected: health.connected,
+      tablesMissing: (health as any).tablesMissing || false,
       message: health.message,
       error: health.error,
-      databaseType: health.connected ? 'Supabase PostgreSQL' : 'Local SQLite',
+      databaseType: health.connected && !(health as any).tablesMissing ? 'Supabase PostgreSQL' : 'Local SQLite (Connected to Supabase project)',
     });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/supabase/schema
+ * Returns the raw SQL setup script so the user can easily copy & run it in Supabase
+ */
+router.get('/schema', async (_req, res) => {
+  try {
+    const schemaPath = path.join(process.cwd(), 'supabase-schema.sql');
+    if (fs.existsSync(schemaPath)) {
+      const sql = fs.readFileSync(schemaPath, 'utf8');
+      return res.json({ sql });
+    }
+    return res.status(404).json({ error: 'Schema file not found' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
