@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import bcrypt from 'bcryptjs';
+import { SQL_WASM_BASE64 } from './sqlWasmBinary.ts';
 
 let dbInstance: SqlJsDatabase | null = null;
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
@@ -27,7 +28,10 @@ export async function getDb(): Promise<SqlJsDatabase> {
     console.warn('[Database] Read-only directory access:', err);
   }
 
-  const SQL = await initSqlJs();
+  // Pre-provide wasmBinary directly from bundled memory to guarantee instant, 
+  // zero-filesystem WebAssembly instantiation in both local containers and serverless runtimes
+  const wasmBinary = Buffer.from(SQL_WASM_BASE64, 'base64');
+  const SQL = await initSqlJs({ wasmBinary });
 
   if (fs.existsSync(DB_FILE)) {
     try {
