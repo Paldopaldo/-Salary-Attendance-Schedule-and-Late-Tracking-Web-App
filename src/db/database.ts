@@ -4,8 +4,10 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import bcrypt from 'bcryptjs';
 
 let dbInstance: SqlJsDatabase | null = null;
-const DB_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const DB_DIR = isServerless ? '/tmp/data' : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DB_DIR, 'salary_tracker.sqlite');
+const SEED_FILE = path.resolve(process.cwd(), 'data', 'salary_tracker.sqlite');
 
 // Re-entrant transaction mutex lock for serialized ACID transactions
 let isLocked = false;
@@ -17,8 +19,12 @@ export async function getDb(): Promise<SqlJsDatabase> {
     return dbInstance;
   }
 
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+    }
+  } catch (err) {
+    console.warn('[Database] Read-only directory access:', err);
   }
 
   const SQL = await initSqlJs();
@@ -26,6 +32,13 @@ export async function getDb(): Promise<SqlJsDatabase> {
   if (fs.existsSync(DB_FILE)) {
     try {
       const fileBuffer = fs.readFileSync(DB_FILE);
+      dbInstance = new SQL.Database(fileBuffer);
+    } catch {
+      dbInstance = new SQL.Database();
+    }
+  } else if (fs.existsSync(SEED_FILE)) {
+    try {
+      const fileBuffer = fs.readFileSync(SEED_FILE);
       dbInstance = new SQL.Database(fileBuffer);
     } catch {
       dbInstance = new SQL.Database();
@@ -46,11 +59,14 @@ export async function getDb(): Promise<SqlJsDatabase> {
 export function persistDb(): void {
   if (!dbInstance) return;
   try {
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+    }
     const data = dbInstance.export();
     const buffer = Buffer.from(data);
     fs.writeFileSync(DB_FILE, buffer);
   } catch (err) {
-    console.error('Failed to persist database to disk:', err);
+    console.warn('Could not persist database to disk (e.g. read-only environment):', err);
   }
 }
 
