@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { getDb, withTransaction } from '../db/database.ts';
+import { saveUserToSupabase } from '../db/supabase.ts';
 import { AuditService } from '../services/audit.service.ts';
 import { ScheduleService } from '../services/schedule.service.ts';
 import { authenticate, AuthRequest, JWT_SECRET } from '../middleware/auth.middleware.ts';
@@ -82,6 +83,16 @@ router.post('/register', async (req, res) => {
         [userId, fullName.trim(), cleanEmail, passwordHash, phone?.trim() || null]
       );
     });
+
+    // Persist directly to Supabase
+    saveUserToSupabase({
+      id: userId,
+      email: cleanEmail,
+      fullName: fullName.trim(),
+      passwordHash,
+      phone: phone?.trim() || null,
+      accountStatus: 'ACTIVE',
+    }).catch((e) => console.warn('[Supabase] register user save:', e));
 
     // Initialize default weekly schedule
     await ScheduleService.getUserSchedule(userId);
@@ -411,6 +422,13 @@ router.post('/reset-password', async (req, res) => {
       dbTx.run('UPDATE password_reset_tokens SET used = 1 WHERE token = ?;', [token]);
     });
 
+    saveUserToSupabase({
+      id: userId,
+      email: '',
+      fullName: '',
+      passwordHash: hash,
+    }).catch((e) => console.warn('[Supabase] reset-password user save:', e));
+
     await AuditService.logAction(
       userId,
       'PASSWORD_CHANGED',
@@ -470,6 +488,14 @@ router.put('/profile', authenticate, async (req: AuthRequest, res) => {
       );
     });
 
+    saveUserToSupabase({
+      id: userId,
+      email: req.user!.email,
+      fullName: fullName?.trim() || req.user!.fullName,
+      phone: phone?.trim(),
+      profilePicture: profilePicture || null,
+    }).catch((e) => console.warn('[Supabase] profile update save:', e));
+
     await AuditService.logAction(
       userId,
       'PROFILE_UPDATED',
@@ -521,6 +547,13 @@ router.put('/profile/password', authenticate, async (req: AuthRequest, res) => {
         userId,
       ]);
     });
+
+    saveUserToSupabase({
+      id: userId,
+      email: req.user!.email,
+      fullName: req.user!.fullName,
+      passwordHash: newHash,
+    }).catch((e) => console.warn('[Supabase] password update save:', e));
 
     await AuditService.logAction(
       userId,

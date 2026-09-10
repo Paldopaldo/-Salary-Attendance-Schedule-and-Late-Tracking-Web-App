@@ -1,4 +1,5 @@
 import { getDb, withTransaction } from '../db/database.ts';
+import { saveAttendanceToSupabase, deleteAttendanceFromSupabase } from '../db/supabase.ts';
 import {
   AttendanceRecord,
   TodayAttendanceInfo,
@@ -114,6 +115,9 @@ export class AttendanceService {
         createdAt: manila.isoString,
         updatedAt: manila.isoString,
       };
+
+      // Persist directly to Supabase
+      saveAttendanceToSupabase(record).catch((e) => console.warn('[Supabase] checkIn save:', e));
 
       // Create Audit Log
       const lateMsg = lateMinutes > 0 ? `${lateMinutes} minutes late` : 'on time';
@@ -274,6 +278,9 @@ export class AttendanceService {
         createdAt: manila.isoString,
         updatedAt: manila.isoString,
       };
+
+      // Persist directly to Supabase
+      saveAttendanceToSupabase(updatedRecord).catch((e) => console.warn('[Supabase] checkOut save:', e));
 
       // Create Audit Log
       await AuditService.logAction(
@@ -551,6 +558,9 @@ export class AttendanceService {
 
       db.run('DELETE FROM attendance WHERE user_id = ? AND work_date = ?;', [userId, targetDate]);
 
+      // Delete directly from Supabase
+      deleteAttendanceFromSupabase(userId, targetDate).catch((e) => console.warn('[Supabase] resetToday delete:', e));
+
       await AuditService.logAction(
         userId,
         'ATTENDANCE_RESET',
@@ -676,28 +686,33 @@ export class AttendanceService {
         options.userAgent || 'App-Client'
       );
 
+      const createdAttendance = {
+        id,
+        userId,
+        workDate,
+        scheduledStart,
+        scheduledEnd,
+        timeIn,
+        timeOut,
+        breakHours,
+        totalHours: netHours,
+        regularHours,
+        overtimeHours,
+        lateMinutes,
+        attendanceStatus: attendanceStatus as any,
+        hourlyRate,
+        salary,
+        notes: options.notes,
+        createdAt: manila.isoString,
+        updatedAt: manila.isoString,
+      };
+
+      // Persist directly to Supabase
+      saveAttendanceToSupabase(createdAttendance).catch((e) => console.warn('[Supabase] logAttendance save:', e));
+
       return {
         message: `Attendance logged successfully for ${workDate}: In at ${formatTo12Hour(timeIn)}, Out at ${formatTo12Hour(timeOut)} (${regularHours}h · ₱${salary}).`,
-        attendance: {
-          id,
-          userId,
-          workDate,
-          scheduledStart,
-          scheduledEnd,
-          timeIn,
-          timeOut,
-          breakHours,
-          totalHours: netHours,
-          regularHours,
-          overtimeHours,
-          lateMinutes,
-          attendanceStatus: attendanceStatus as any,
-          hourlyRate,
-          salary,
-          notes: options.notes,
-          createdAt: manila.isoString,
-          updatedAt: manila.isoString,
-        },
+        attendance: createdAttendance,
       };
     });
   }

@@ -9,11 +9,19 @@ CREATE TABLE IF NOT EXISTS public.users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   full_name TEXT NOT NULL,
+  phone TEXT,
+  profile_picture TEXT,
+  account_status TEXT NOT NULL DEFAULT 'ACTIVE',
   hourly_rate NUMERIC(10, 2) NOT NULL DEFAULT 100.00,
   scheduled_start_time TEXT NOT NULL DEFAULT '07:00',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Ensure columns exist if table was previously created
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS profile_picture TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'ACTIVE';
 
 -- 2. SCHEDULES TABLE
 CREATE TABLE IF NOT EXISTS public.schedules (

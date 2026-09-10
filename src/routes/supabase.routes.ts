@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { checkSupabaseHealth, isSupabaseConfigured, migrateSqliteToSupabase } from '../db/supabase.ts';
+import { checkSupabaseHealth, isSupabaseConfigured, migrateSqliteToSupabase, syncFromSupabaseToSqlite } from '../db/supabase.ts';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware.ts';
 
 const router = Router();
@@ -17,6 +17,31 @@ router.get('/status', async (_req, res) => {
       message: health.message,
       error: health.error,
       databaseType: health.connected ? 'Supabase PostgreSQL' : 'Local SQLite',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/supabase/sync
+ * Pulls latest records directly from Supabase into memory
+ */
+router.post('/sync', authenticate, async (_req, res) => {
+  try {
+    if (!isSupabaseConfigured()) {
+      return res.status(400).json({
+        error: 'Supabase credentials are not configured.',
+      });
+    }
+    const { getDb } = await import('../db/database.ts');
+    const db = await getDb();
+    const success = await syncFromSupabaseToSqlite(db, true);
+    return res.json({
+      success,
+      message: success
+        ? 'Latest records successfully refreshed from Supabase PostgreSQL.'
+        : 'Failed to sync from Supabase. Ensure supabase-schema.sql has been executed.',
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

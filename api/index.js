@@ -4,9 +4,6 @@ import dotenv from "dotenv";
 // src/app.ts
 import express from "express";
 
-import app from "../src/app.ts";
-
-
 // src/routes/auth.routes.ts
 import { Router } from "express";
 import bcrypt2 from "bcryptjs";

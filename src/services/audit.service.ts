@@ -1,4 +1,5 @@
 import { getDb, withTransaction } from '../db/database.ts';
+import { saveAuditLogToSupabase } from '../db/supabase.ts';
 import { AuditLogEntry } from '../types.ts';
 
 export class AuditService {
@@ -20,6 +21,16 @@ export class AuditService {
          VALUES (?, ?, ?, ?, datetime('now'), ?, ?);`,
         [id, userId, action, description, ipAddress, userAgent]
       );
+
+      // Persist directly to Supabase
+      saveAuditLogToSupabase({
+        id,
+        userId,
+        action,
+        description,
+        ipAddress,
+        userAgent,
+      }).catch((e) => console.warn('[Supabase] audit log save:', e));
     } catch (err) {
       console.error('Failed to write audit log:', err);
     }

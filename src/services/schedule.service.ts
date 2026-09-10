@@ -1,4 +1,5 @@
 import { getDb, withTransaction } from '../db/database.ts';
+import { saveScheduleToSupabase } from '../db/supabase.ts';
 import { UserSchedule } from '../types.ts';
 
 export class ScheduleService {
@@ -83,6 +84,16 @@ export class ScheduleService {
         [id, userId, dayOfWeek, data.scheduledStart, data.scheduledEnd, data.isRestDay ? 1 : 0]
       );
 
+      // Persist directly to Supabase
+      saveScheduleToSupabase({
+        id,
+        userId,
+        dayOfWeek,
+        scheduledStart: data.scheduledStart,
+        scheduledEnd: data.scheduledEnd,
+        isRestDay: data.isRestDay,
+      }).catch((e) => console.warn('[Supabase] updateScheduleDay save:', e));
+
       return {
         id,
         userId,
@@ -99,11 +110,20 @@ export class ScheduleService {
     await withTransaction((db) => {
       for (const day of days) {
         const isRest = day === 'Saturday' || day === 'Sunday' ? 1 : 0;
+        const schId = `sch-${userId}-${day.toLowerCase()}`;
         db.run(
           `INSERT OR IGNORE INTO schedules (id, user_id, day_of_week, start_time, end_time, is_rest_day)
            VALUES (?, ?, ?, '07:00', '17:00', ?);`,
-          [`sch-${userId}-${day.toLowerCase()}`, userId, day, isRest]
+          [schId, userId, day, isRest]
         );
+        saveScheduleToSupabase({
+          id: schId,
+          userId,
+          dayOfWeek: day,
+          scheduledStart: '07:00',
+          scheduledEnd: '17:00',
+          isRestDay: Boolean(isRest),
+        }).catch((e) => console.warn('[Supabase] initDefaultSchedule save:', e));
       }
     });
   }

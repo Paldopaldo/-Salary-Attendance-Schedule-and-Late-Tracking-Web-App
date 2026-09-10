@@ -3,6 +3,7 @@ import path from 'path';
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import bcrypt from 'bcryptjs';
 import { SQL_WASM_BASE64 } from './sqlWasmBinary.ts';
+import { isSupabaseConfigured, syncFromSupabaseToSqlite } from './supabase.ts';
 
 let dbInstance: SqlJsDatabase | null = null;
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
@@ -56,6 +57,11 @@ export async function getDb(): Promise<SqlJsDatabase> {
 
   initSchemaAndSeed(dbInstance);
   persistDb();
+
+  // If Supabase is configured, trigger initial sync in background
+  if (isSupabaseConfigured()) {
+    syncFromSupabaseToSqlite(dbInstance, false).catch(() => {});
+  }
 
   return dbInstance;
 }
