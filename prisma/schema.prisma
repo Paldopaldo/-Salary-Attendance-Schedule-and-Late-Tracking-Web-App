@@ -1,0 +1,146 @@
+// Prisma Schema for Salary Tracker System
+// Provider configured for PostgreSQL, fully compatible with SQLite
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
+  HOLIDAY
+  REST_DAY
+}
+
+enum PayrollStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(EMPLOYEE)
+  employee     Employee?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model Department {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  code      String     @unique
+  employees Employee[]
+  createdAt DateTime   @default(now())
+
+  @@map("departments")
+}
+
+model Employee {
+  id           String           @id @default(uuid())
+  employeeCode String           @unique
+  userId       String?          @unique
+  user         User?            @relation(fields: [userId], references: [id])
+  fullName     String
+  email        String           @unique
+  phone        String
+  position     String
+  departmentId String
+  department   Department       @relation(fields: [departmentId], references: [id])
+  hourlyRate   Decimal          @default(100.00)
+  dateHired    DateTime
+  status       EmploymentStatus @default(ACTIVE)
+  attendances  Attendance[]
+  payrolls     Payroll[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@map("employees")
+}
+
+model Attendance {
+  id           String           @id @default(uuid())
+  employeeId   String
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date         DateTime         @db.Date
+  timeIn       String
+  timeOut      String
+  breakHours   Decimal          @default(0.00)
+  totalHours   Decimal          // Enforced <= 8.00 via validation & DB check
+  hourlyRate   Decimal          @default(100.00)
+  dailySalary  Decimal          // Enforced <= 800.00
+  status       AttendanceStatus @default(PRESENT)
+  notes        String?
+  payrollItems PayrollItem[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([employeeId, date], name: "unique_employee_daily_attendance")
+  @@index([employeeId, date])
+  @@map("attendance")
+}
+
+model Payroll {
+  id               String        @id @default(uuid())
+  employeeId       String
+  employee         Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month            String        // YYYY-MM
+  totalWorkingDays Int
+  totalHours       Decimal       // Enforced <= 100.00
+  hourlyRate       Decimal       @default(100.00)
+  grossSalary      Decimal       // Enforced <= 10,000.00
+  status           PayrollStatus @default(DRAFT)
+  items            PayrollItem[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([employeeId, month], name: "unique_employee_monthly_payroll")
+  @@index([employeeId, month])
+  @@map("payroll")
+}
+
+model PayrollItem {
+  id           String     @id @default(uuid())
+  payrollId    String
+  payroll      Payroll    @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  attendanceId String
+  attendance   Attendance @relation(fields: [attendanceId], references: [id])
+  date         DateTime   @db.Date
+  hours        Decimal
+  hourlyRate   Decimal
+  dailySalary  Decimal
+
+  @@map("payroll_items")
+}
+
+model SystemSetting {
+  key         String   @id
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
